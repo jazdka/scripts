@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.1.5
+// @version      0.1.6
 // @author       jaz / jazdka
 // @description  Stores template images + coords and loads them into the already-running BM UI.
 // @match        https://wplace.live/*
@@ -9,6 +9,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addStyle
+// @grant        GM_registerMenuCommand
 // ==/UserScript==
 
 (() => {
@@ -323,6 +324,13 @@
       backdrop-filter: blur(6px);
     }
     #bm-icon-mode img{ width:28px; height:28px; display:block; }
+
+    #bm-lib-bmreset {
+      padding: 4px 7px !important;
+      font-size: 12px !important;
+      opacity: 0.9;
+    }
+    #bm-lib-bmreset:hover { opacity: 1; }
   `);
 
   function ensureBlueMarbleIconMode() {
@@ -337,25 +345,50 @@
       document.body.appendChild(icon);
     }
 
-    const ui = loadBMUI();
-    applyPositionFromUI(icon, ui.icon);
+    // ---- helpers
+    const clampPosRightTop = (pos, el) => {
+      const w = el?.offsetWidth || 46;
+      const h = el?.offsetHeight || 46;
+      const maxRight = Math.max(0, window.innerWidth - w);
+      const maxTop   = Math.max(0, window.innerHeight - h);
 
-    const setBMMinimized = (min) => {
-      const current = loadBMUI();
-      current.minimized = !!min;
+      let right = Number(pos?.right);
+      let top   = Number(pos?.top);
 
-      if (min) {
-        bm.panel.style.display = 'none';
-        icon.style.display = 'flex';
-        current.icon = positionToRightTop(icon);
-      } else {
-        icon.style.display = 'none';
-        bm.panel.style.display = '';
-        current.icon = positionToRightTop(icon);
-      }
-      saveBMUI(current);
+      if (!Number.isFinite(right)) right = DEFAULT_BM_UI.icon.right;
+      if (!Number.isFinite(top))   top   = DEFAULT_BM_UI.icon.top;
+
+      // right is distance from right edge
+      right = clamp(right, 0, maxRight);
+      top   = clamp(top,   0, maxTop);
+
+      return { right, top };
     };
 
+    const showIcon = () => {
+      const st = loadBMUI();
+      st.icon = clampPosRightTop(st.icon, icon);
+      applyPositionFromUI(icon, st.icon);
+
+      bm.panel.style.display = 'none';
+      icon.style.display = 'flex';
+
+      // persist clamped pos
+      st.minimized = true;
+      st.icon = positionToRightTop(icon);
+      saveBMUI(st);
+    };
+
+    const showPanel = () => {
+      const st = loadBMUI();
+      st.minimized = false;
+      saveBMUI(st);
+
+      icon.style.display = 'none';
+      bm.panel.style.display = '';
+    };
+
+    // ---- add toggle button once
     if (!qs('#bm-icon-toggle-btn')) {
       const btn = document.createElement('button');
       btn.id = 'bm-icon-toggle-btn';
@@ -372,18 +405,20 @@
         e.preventDefault();
         e.stopPropagation();
         const st = loadBMUI();
-        setBMMinimized(!st.minimized);
+        if (st.minimized) showPanel();
+        else showIcon();
       });
     }
 
+    // ---- draggable icon
     const dragState = makeDraggableWithClickGuard({
       root: icon,
       handle: icon,
       shouldStartDrag: () => true,
       onMoveEnd: () => {
-        const current = loadBMUI();
-        current.icon = positionToRightTop(icon);
-        saveBMUI(current);
+        const st = loadBMUI();
+        st.icon = positionToRightTop(icon);
+        saveBMUI(st);
       },
     });
 
@@ -391,10 +426,58 @@
       if (dragState.wasDrag()) return;
       e.preventDefault();
       e.stopPropagation();
-      setBMMinimized(false);
+      showPanel();
     });
 
-    setBMMinimized(!!ui.minimized);
+    // ---- menu emergency reset (no reinstall needed)
+    try {
+      GM_registerMenuCommand('Reset BlueMarble icon mode (unbrick)', () => {
+        const st = loadBMUI();
+        st.minimized = false;
+        st.icon = { ...DEFAULT_BM_UI.icon };
+        saveBMUI(st);
+
+        // hard-force visible
+        icon.style.display = 'none';
+        bm.panel.style.display = '';
+        alert('BlueMarble icon mode reset. Panel should be visible now.');
+      });
+    } catch (_) {}
+
+    // ---- restore state safely on load
+    const st = loadBMUI();
+    if (st.minimized) showIcon();
+    else showPanel();
+
+    // ---- watchdog: if panel hidden but icon isn't visible, recover automatically
+    // (covers cases where CSS/other scripts hid icon, or it got detached)
+    const watchdog = () => {
+      const panelHidden = bm.panel && bm.panel.style.display === 'none';
+      const iconMissingOrHidden = !icon || !document.body.contains(icon) || getComputedStyle(icon).display === 'none';
+
+      if (panelHidden && iconMissingOrHidden) {
+        // recreate icon if needed
+        if (!icon || !document.body.contains(icon)) {
+          icon = document.createElement('div');
+          icon.id = 'bm-icon-mode';
+          icon.innerHTML = `<img src="${BM_FAVICON}" alt="BlueMarble" title="Open BlueMarble" />`;
+          document.body.appendChild(icon);
+        }
+        // force icon visible & clamped; if anything goes wrong, show panel
+        try { showIcon(); } catch { showPanel(); }
+      }
+    };
+
+    // run a few times early, then every 2s (cheap)
+    setTimeout(watchdog, 250);
+    setTimeout(watchdog, 1000);
+    setInterval(watchdog, 2000);
+
+    // also clamp on resize
+    window.addEventListener('resize', () => {
+      const s2 = loadBMUI();
+      if (s2.minimized) showIcon();
+    }, { passive: true });
   }
 
   function setTLFormCoords(tlx, tly, px, py) {
@@ -439,6 +522,7 @@
     panel.innerHTML = `
       <div class="bar" id="bm-lib-bar">
         <div class="title">Template Library</div>
+        <button id="bm-lib-bmreset" type="button" title="Reset BlueMarble (unbrick)">↺</button>
         <button id="bm-lib-min" type="button" title="Minimize">–</button>
       </div>
 
@@ -834,6 +918,22 @@
       URL.revokeObjectURL(url);
     }
 
+    function resetBlueMarbleFromLibrary() {
+      const bm = getBMElements();
+
+      // Reset saved BM icon-mode state/position so it can't stay hidden forever
+      const st = loadBMUI();
+      st.minimized = false;
+      st.icon = { ...DEFAULT_BM_UI.icon };
+      saveBMUI(st);
+
+      // Force BM visible right now
+      const icon = qs('#bm-icon-mode');
+      if (icon) icon.style.display = 'none';
+      if (bm?.panel) bm.panel.style.display = '';
+      else alert('BlueMarble panel not found yet. Try once BlueMarble has loaded.');
+    }
+
     function hasDuplicateNames(list) {
       const seen = new Set();
       for (const t of list) {
@@ -933,6 +1033,12 @@
 
     qs('#bm-lib-add').addEventListener('click', () => addNewTemplate().catch(console.error));
     qs('#bm-lib-edit').addEventListener('click', () => editSelectedTemplate().catch(console.error));
+
+    qs('#bm-lib-bmreset').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      resetBlueMarbleFromLibrary();
+    });
 
     qs('#bm-lib-exportcurrent').addEventListener('click', exportCurrentTemplate);
     qs('#bm-lib-exportall').addEventListener('click', exportAllTemplates);
