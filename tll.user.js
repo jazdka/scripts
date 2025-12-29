@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Template Library Loader
-// @namespace    template-library
-// @version      0.0.1
-// @description  Stores template images + coords and loads them into the already-running BM UI.
+// @name         Blue Marble - Template Library Loader (draggable + import/export + BM icon mode)
+// @namespace    local-bm-template-library
+// @version      0.1.2
+// @description  Stores template images + coords and loads them into the already-running Blue Marble UI.
 // @match        https://wplace.live/*
 // @run-at       document-end
 // @grant        GM_getValue
@@ -32,6 +32,7 @@
 
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const qs = (sel) => document.querySelector(sel);
+  const normName = (s) => String(s || '').trim().toLowerCase();
 
   function safeJsonParse(s, fallback) { try { return JSON.parse(s); } catch { return fallback; } }
 
@@ -52,8 +53,6 @@
     return Array.isArray(v) ? v : [];
   }
   function saveStore(arr) { GM_setValue(STORE_KEY, JSON.stringify(arr)); }
-
-  const normName = (s) => String(s || '').trim().toLowerCase();
 
   function toBase64(file) {
     return new Promise((resolve, reject) => {
@@ -98,6 +97,11 @@
       px:  qs('#bm-x'),
       py:  qs('#bm-y'),
       create: qs('#bm-r'),
+      // BlueMarble stores last pixel coords in this internal object:
+      // It’s the same thing their pin button reads: t.t?.Ut
+      // We can’t access that directly, but BM also writes a visible span #bm-h
+      // and our previous scripts observed it. We'll parse it if present.
+      lastClickSpan: qs('#bm-h'),
     };
   }
   function bmReady() {
@@ -273,17 +277,20 @@
     }
     #bm-lib button.action:hover { background: rgba(255,255,255,.16); }
 
-    #bm-lib button.mini {
+    #bm-lib button.small {
       width: 100%;
       background: rgba(255,255,255,.10);
       border: 1px solid rgba(255,255,255,.14);
       color: #fff;
       border-radius: 10px;
-      padding: 7px 9px;
+      padding: 7px 0;
       cursor: pointer;
       white-space: nowrap;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1;
     }
-    #bm-lib button.mini:hover { background: rgba(255,255,255,.16); }
+    #bm-lib button.small:hover { background: rgba(255,255,255,.16); }
 
     #bm-lib .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 
@@ -361,7 +368,7 @@
     #bm-icon-mode img { width: 28px; height: 28px; display: block; }
   `);
 
-  // BlueMarble icon mode
+  // ---- BlueMarble icon mode
   function ensureBlueMarbleIconMode() {
     const bm = getBMElements();
     if (!bm.panel) return;
@@ -434,7 +441,41 @@
     setBMMinimized(!!ui.minimized);
   }
 
-  // Template Library UI
+  // ---- Helpers for import-from-map/BM
+  function setTLFormCoords(tlx, tly, px, py) {
+    setInputValue(qs('#bm-lib-tlx'), tlx);
+    setInputValue(qs('#bm-lib-tly'), tly);
+    setInputValue(qs('#bm-lib-px'),  px);
+    setInputValue(qs('#bm-lib-py'),  py);
+  }
+
+  function importCoordsFromBMIntoTL() {
+    const bm = getBMElements();
+    if (!bmReady()) return alert('Blue Marble inputs not found yet.');
+    const tlx = Number(bm.tlx.value);
+    const tly = Number(bm.tly.value);
+    const px  = Number(bm.px.value);
+    const py  = Number(bm.py.value);
+    if (![tlx,tly,px,py].every(n => Number.isFinite(n))) return alert('Blue Marble coords are not valid numbers.');
+    setTLFormCoords(tlx, tly, px, py);
+  }
+
+  function parseLastClickedFromBmSpan() {
+    // BM creates: (Tl X: 1, Tl Y: 2, Px X: 3, Px Y: 4)
+    const span = qs('#bm-h');
+    const txt = span?.textContent || '';
+    const m = txt.match(/Tl X:\s*(\d+),\s*Tl Y:\s*(\d+),\s*Px X:\s*(\d+),\s*Px Y:\s*(\d+)/i);
+    if (!m) return null;
+    return { tlx: Number(m[1]), tly: Number(m[2]), px: Number(m[3]), py: Number(m[4]) };
+  }
+
+  function importCoordsFromMapIntoTL() {
+    const v = parseLastClickedFromBmSpan();
+    if (!v) return alert('No pixel selected yet. Click a pixel on the map first (so BlueMarble shows the coords).');
+    setTLFormCoords(v.tlx, v.tly, v.px, v.py);
+  }
+
+  // ---- Template Library UI
   function renderLibraryUI() {
     if (qs('#bm-lib') || qs('#bm-lib-icon')) return;
 
@@ -458,13 +499,23 @@
           <button class="action" id="bm-lib-loadcreate" type="button" title="Loads then clicks Blue Marble's Create button">Load + Create</button>
         </div>
 
+        <!-- Row with arrows + delete current -->
         <div class="row">
-          <button class="mini" id="bm-lib-moveup" type="button" title="Move selected up">Move ↑</button>
-          <button class="mini" id="bm-lib-movedown" type="button" title="Move selected down">Move ↓</button>
+          <div style="flex: 1;">
+            <button class="small" id="bm-lib-moveup" type="button" title="Move selected up">↑</button>
+          </div>
+          <div style="flex: 1;">
+            <button class="small" id="bm-lib-movedown" type="button" title="Move selected down">↓</button>
+          </div>
+          <div style="flex: 2;">
+            <button class="action" id="bm-lib-deletecurrent" type="button">Delete current</button>
+          </div>
         </div>
 
+        <!-- New row: import coords buttons -->
         <div class="row">
-          <button class="action" id="bm-lib-deletecurrent" type="button">Delete current</button>
+          <button class="action" id="bm-lib-importmap" type="button" title="Requires a pixel to be selected on the map">Import from map</button>
+          <button class="action" id="bm-lib-importbm" type="button" title="Copies coords from BlueMarble coordinate inputs">Import from BM</button>
         </div>
 
         <div class="row">
@@ -611,7 +662,6 @@
         qs('#bm-lib-name').focus();
         return null;
       }
-
       const items = loadStore();
       const existing = new Set(items.map(t => normName(t.name)));
       if (existing.has(normName(name))) {
@@ -699,6 +749,9 @@
     function deleteCurrent() {
       const picked = getSelectedEntry();
       if (!picked) return alert('No template selected.');
+      const ok = confirm(`Delete "${picked.entry.name}"? This cannot be undone.`);
+      if (!ok) return;
+
       picked.items.splice(picked.idx, 1);
       saveStore(picked.items);
       refreshSelect();
@@ -721,11 +774,22 @@
       URL.revokeObjectURL(url);
     }
 
-    function makeUniqueName(baseName, usedLower) {
-      let name = baseName.trim();
-      if (!name) name = 'Template';
-      const baseLower = normName(name);
+    function hasDuplicateNames(list) {
+      const seen = new Set();
+      for (const t of list) {
+        const n = normName(t?.name);
+        if (!n) continue;
+        if (seen.has(n)) return true;
+        seen.add(n);
+      }
+      return false;
+    }
 
+    function makeUniqueName(baseName, usedLower) {
+      let name = String(baseName || '').trim();
+      if (!name) name = 'Template';
+
+      const baseLower = normName(name);
       if (!usedLower.has(baseLower)) {
         usedLower.add(baseLower);
         return name;
@@ -755,31 +819,46 @@
       );
       if (!incomingRaw.length) return alert('No valid templates found.');
 
+      // Ask about duplicates (2)
+      const dupInImport = hasDuplicateNames(incomingRaw);
+      if (dupInImport) {
+        const ok = confirm(
+          'Duplicate template names were detected in the import.\n\n' +
+          'Press OK to import anyway (duplicates will be renamed like "Name (2)", "Name (3)", ...).\n' +
+          'Press Cancel to abort the import.'
+        );
+        if (!ok) return;
+      }
+
       const existing = loadStore();
 
-      // De-dupe identical entries (exact content-ish)
+      // Remove exact duplicates (same coords/file/data size) but DO NOT collapse by name.
       const exactKey = (t) =>
-        `${normName(t.name)}::${t.coords.tlx},${t.coords.tly},${t.coords.px},${t.coords.py}::${t.filename || ''}::${(t.dataUrl || '').length}`;
+        `${t.coords.tlx},${t.coords.tly},${t.coords.px},${t.coords.py}::${t.filename || ''}::${(t.dataUrl || '').length}`;
 
       const seenExact = new Set(existing.map(exactKey));
+
+      // For naming: if dupInImport or name conflicts with existing, we rename.
       const usedNames = new Set(existing.map(t => normName(t.name)));
 
       const incoming = [];
       for (const t of incomingRaw) {
-        // if truly identical entry already exists, skip it
         if (seenExact.has(exactKey(t))) continue;
 
-        // ensure unique name across existing + within imported file
-        const uniqueName = makeUniqueName(t.name, usedNames);
+        const fixed = { ...t };
+        // If duplicates exist OR name collides with existing, ensure unique
+        if (dupInImport || usedNames.has(normName(fixed.name))) {
+          fixed.name = makeUniqueName(fixed.name, usedNames);
+        } else {
+          usedNames.add(normName(fixed.name));
+        }
 
-        const fixed = { ...t, name: uniqueName };
         seenExact.add(exactKey(fixed));
         incoming.push(fixed);
       }
 
       if (!incoming.length) return alert('Nothing new to import (all entries already exist).');
 
-      // Imported go on top
       const merged = [...incoming, ...existing];
       saveStore(merged);
       refreshSelect(0);
@@ -787,13 +866,17 @@
     }
 
     // wire buttons
-    qs('#bm-lib-add').addEventListener('click', () => addNewTemplate().catch(console.error));
     qs('#bm-lib-load').addEventListener('click', () => loadIntoBM(false));
     qs('#bm-lib-loadcreate').addEventListener('click', () => loadIntoBM(true));
-    qs('#bm-lib-deletecurrent').addEventListener('click', deleteCurrent);
+    qs('#bm-lib-add').addEventListener('click', () => addNewTemplate().catch(console.error));
 
     qs('#bm-lib-moveup').addEventListener('click', () => moveSelected(-1));
     qs('#bm-lib-movedown').addEventListener('click', () => moveSelected(+1));
+
+    qs('#bm-lib-deletecurrent').addEventListener('click', deleteCurrent);
+
+    qs('#bm-lib-importmap').addEventListener('click', importCoordsFromMapIntoTL);
+    qs('#bm-lib-importbm').addEventListener('click', importCoordsFromBMIntoTL);
 
     qs('#bm-lib-export').addEventListener('click', exportTemplates);
 
