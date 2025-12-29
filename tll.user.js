@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Blue Marble - Template Library Loader (draggable + import/export + BM icon mode)
+// @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.1.2
-// @description  Stores template images + coords and loads them into the already-running Blue Marble UI.
+// @version      0.1.3
+// @description  Stores template images + coords and loads them into the already-running BM UI.
 // @match        https://wplace.live/*
 // @run-at       document-end
 // @grant        GM_getValue
