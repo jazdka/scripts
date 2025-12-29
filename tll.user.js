@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.1.6
+// @version      0.1.7
 // @author       jaz / jazdka
 // @description  Stores template images + coords and loads them into the already-running BM UI.
 // @match        https://wplace.live/*
@@ -323,7 +323,15 @@
       border:1px solid rgba(255,255,255,.12);
       backdrop-filter: blur(6px);
     }
-    #bm-icon-mode img{ width:28px; height:28px; display:block; }
+
+    #bm-icon-mode img {
+      width: 28px;
+      height: 28px;
+      display: block;
+      pointer-events: none;  /* drag/click handled by the icon container */
+      user-select: none;
+      -webkit-user-drag: none;
+    }
 
     #bm-lib-bmreset {
       padding: 4px 7px !important;
@@ -342,6 +350,11 @@
       icon = document.createElement('div');
       icon.id = 'bm-icon-mode';
       icon.innerHTML = `<img src="${BM_FAVICON}" alt="BlueMarble" title="Open BlueMarble" />`;
+      const img = icon.querySelector('img');
+      if (img) {
+        img.draggable = false;                 // stops “drag the image file”
+        img.addEventListener('dragstart', e => e.preventDefault());
+      }
       document.body.appendChild(icon);
     }
 
