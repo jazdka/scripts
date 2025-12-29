@@ -3,7 +3,7 @@
 // @match       https://wplace.live/*
 // @grant       GM_addStyle
 // @grant       unsafeWindow
-// @version     0.0.1
+// @version     0.0.2
 // @author      jaz/jazdka
 // @run-at document-start
 // @license MIT
@@ -253,43 +253,131 @@
       --noise: 0;
     }
 
-    /* transparent color selector (only in dark mode) */
     html.wplace-darkmode-enabled #color-0 {
       background-color: white !important;
     }
 
-    /* toggle button */
+    /* toggle button: rounded square like BM */
     #wplace-darkmode-toggle {
       position: fixed;
       left: 16px;
       top: 120px;
-      width: 42px;
-      height: 42px;
-      border-radius: 999px;
-      display: grid;
-      place-items: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;              /* <- rounded square */
+      display: flex;
+      align-items: center;
+      justify-content: center;
       z-index: 2147483647;
-      cursor: pointer;
+      cursor: grab;
       user-select: none;
       -webkit-user-select: none;
-      touch-action: none; /* important for drag on touch devices */
-      background: rgba(20, 24, 34, 0.85);
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      touch-action: none;
+
+      background: rgba(20,20,20,.92);
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
       backdrop-filter: blur(6px);
     }
-    #wplace-darkmode-toggle svg {
-      width: 22px;
-      height: 22px;
-      opacity: 0.95;
-      fill: white;
-    }
+
+    /* optional: show different “mode” styling */
     #wplace-darkmode-toggle.wplace-off {
-      background: rgba(240, 240, 240, 0.85);
-      border: 1px solid rgba(0,0,0,0.12);
+      background: rgba(0,0,0,.25);
+      border: 1px solid rgba(255,255,255,.12);
     }
+
+    /* SVG icon */
+    #wplace-darkmode-toggle svg {
+      width: 26px;
+      height: 26px;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+      fill: #fff;
+      opacity: .95;
+    }
+
     #wplace-darkmode-toggle.wplace-off svg {
+      opacity: .85;
+    }
+
+    /* Kill native drag pipeline (like your example does) */
+    #wplace-darkmode-toggle,
+    #wplace-darkmode-toggle * {
+      -webkit-user-drag: none !important;
+      user-drag: none !important;
+      user-select: none !important;
+    }
+    #wplace-darkmode-toggle .dm-icon{
+      width: 28px;
+      height: 28px;
+      display: block;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    /* Shared colors: ON (dark tile) -> white glyph */
+    #wplace-darkmode-toggle .sun .core,
+    #wplace-darkmode-toggle .sun .rays,
+    #wplace-darkmode-toggle .moon .crescent{
+      fill: #fff;
+      stroke: #fff;
+    }
+
+    /* OFF (light tile) -> dark glyph */
+    #wplace-darkmode-toggle.wplace-off .sun .core,
+    #wplace-darkmode-toggle.wplace-off .sun .rays,
+    #wplace-darkmode-toggle.wplace-off .moon .crescent{
       fill: #111;
+      stroke: #111;
+    }
+
+    /* ======= “MORPH” ANIMATION (sun <-> moon) =======
+       Default state below assumes Dark Mode is ON (enabled): show MOON.
+       When OFF (.wplace-off): show SUN.
+    */
+    #wplace-darkmode-toggle .sun,
+    #wplace-darkmode-toggle .moon{
+      transform-origin: 32px 32px;
+      transition:
+        opacity 180ms ease,
+        transform 280ms cubic-bezier(.2,.8,.2,1);
+      will-change: transform, opacity;
+    }
+
+    /* Dark Mode ON -> Moon visible */
+    #wplace-darkmode-toggle .moon{
+      opacity: 1;
+      transform: rotate(0deg) scale(1);
+    }
+    #wplace-darkmode-toggle .sun{
+      opacity: 0;
+      transform: rotate(-120deg) scale(0.6);
+    }
+
+    /* Dark Mode OFF -> Sun visible */
+    #wplace-darkmode-toggle.wplace-off .sun{
+      opacity: 1;
+      transform: rotate(0deg) scale(1);
+    }
+    #wplace-darkmode-toggle.wplace-off .moon{
+      opacity: 0;
+      transform: rotate(140deg) scale(0.6);
+    }
+
+    /* Extra sparkle: rays “pop” a bit when sun appears */
+    #wplace-darkmode-toggle .sun .rays{
+      transition: opacity 180ms ease, transform 280ms cubic-bezier(.2,.8,.2,1);
+      transform-origin: 32px 32px;
+    }
+    #wplace-darkmode-toggle.wplace-off .sun .rays{
+      opacity: 1;
+      transform: scale(1);
+    }
+    #wplace-darkmode-toggle:not(.wplace-off) .sun .rays{
+      opacity: 0;
+      transform: scale(0.75);
     }
   `);
 
@@ -303,9 +391,21 @@
 
     // Simple icon that looks fine in both states
     btn.innerHTML = `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 2a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1zm0 18a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1zM4.22 5.64a1 1 0 0 1 1.41 0l.71.71A1 1 0 0 1 4.93 7.77l-.71-.71a1 1 0 0 1 0-1.42zM17.66 19.07a1 1 0 0 1 1.41 0l.71.71a1 1 0 0 1-1.41 1.41l-.71-.71a1 1 0 0 1 0-1.41zM2 12a1 1 0 0 1 1-1h1a1 1 0 1 1 0 2H3a1 1 0 0 1-1-1zm18 0a1 1 0 0 1 1-1h1a1 1 0 1 1 0 2h-1a1 1 0 0 1-1-1zM5.64 19.78a1 1 0 0 1 0-1.41l.71-.71a1 1 0 1 1 1.41 1.41l-.71.71a1 1 0 0 1-1.41 0zM19.07 6.34a1 1 0 0 1 0-1.41l.71-.71a1 1 0 1 1 1.41 1.41l-.71.71a1 1 0 0 1-1.41 0zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/>
-      </svg>
+    <svg class="dm-icon" viewBox="0 0 64 64" aria-hidden="true">
+      <!-- SUN -->
+      <g class="sun">
+        <g class="rays" fill="none" stroke-width="4" stroke-linecap="round">
+          <path d="M32 6v8M32 50v8M6 32h8M50 32h8M13 13l6 6M45 45l6 6M51 13l-6 6M19 45l-6 6"/>
+        </g>
+        <circle class="core" cx="32" cy="32" r="12"/>
+      </g>
+
+      <!-- MOON -->
+      <g class="moon">
+        <!-- crescent via 2 circles (looks clean, no weird path stuff) -->
+        <path class="crescent" d="M41.5 44.5c-11 0-20-9-20-20 0-7.4 4-14 10-17.4-1.7 3.2-2.6 6.9-2.6 10.7 0 12.7 10.3 23 23 23 2.9 0 5.8-.6 8.4-1.7-3.4 3.6-8.2 5.4-18.8 5.4z"/>
+      </g>
+    </svg>
     `;
 
     function syncBtnState() {
