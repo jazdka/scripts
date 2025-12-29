@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.1.4
+// @version      0.1.5
 // @description  Stores template images + coords and loads them into the already-running BM UI.
 // @match        https://wplace.live/*
 // @run-at       document-end
@@ -489,8 +489,9 @@
         </div>
 
         <div class="row">
-          <button class="action" id="bm-lib-export" type="button">Export templates</button>
-          <button class="action" id="bm-lib-import" type="button">Import templates</button>
+          <button class="action" id="bm-lib-exportcurrent" type="button">Export current</button>
+          <button class="action" id="bm-lib-exportall" type="button">Export all</button>
+          <button class="action" id="bm-lib-import" type="button">Import</button>
           <input id="bm-lib-importfile" type="file" accept="application/json,.json" />
         </div>
       </div>
@@ -784,7 +785,16 @@
       clearLocalChosenFile();
     }
 
-    function exportTemplates() {
+    function sanitizeFilename(name) {
+      // Keep it simple + cross-platform safe
+      return String(name || 'template')
+        .replace(/[\/\\?%*:|"<>]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120);
+    }
+
+    function exportAllTemplates() {
       const items = loadStore();
       const payload = { version: 1, exportedAt: new Date().toISOString(), templates: items };
       const json = JSON.stringify(payload, null, 2);
@@ -795,6 +805,28 @@
       const a = document.createElement('a');
       a.href = url;
       a.download = `bm-template-library-export.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportCurrentTemplate() {
+      const picked = getSelectedEntry?.();
+      if (!picked) return alert('Select a template first.');
+
+      const { entry } = picked;
+
+      const payload = { version: 1, exportedAt: new Date().toISOString(), templates: [entry] };
+      const json = JSON.stringify(payload, null, 2);
+
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      // filename is the name of the template
+      a.download = `${sanitizeFilename(entry.name)}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -901,7 +933,8 @@
     qs('#bm-lib-add').addEventListener('click', () => addNewTemplate().catch(console.error));
     qs('#bm-lib-edit').addEventListener('click', () => editSelectedTemplate().catch(console.error));
 
-    qs('#bm-lib-export').addEventListener('click', exportTemplates);
+    qs('#bm-lib-exportcurrent').addEventListener('click', exportCurrentTemplate);
+    qs('#bm-lib-exportall').addEventListener('click', exportAllTemplates);
 
     const importBtn = qs('#bm-lib-import');
     const importFile = qs('#bm-lib-importfile');
