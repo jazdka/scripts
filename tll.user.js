@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.1.3
+// @version      0.1.4
 // @description  Stores template images + coords and loads them into the already-running BM UI.
 // @match        https://wplace.live/*
 // @run-at       document-end
@@ -97,11 +97,6 @@
       px:  qs('#bm-x'),
       py:  qs('#bm-y'),
       create: qs('#bm-r'),
-      // BlueMarble stores last pixel coords in this internal object:
-      // It’s the same thing their pin button reads: t.t?.Ut
-      // We can’t access that directly, but BM also writes a visible span #bm-h
-      // and our previous scripts observed it. We'll parse it if present.
-      lastClickSpan: qs('#bm-h'),
     };
   }
   function bmReady() {
@@ -124,7 +119,6 @@
     return { right, top };
   }
 
-  // Drag helper with click/drag guard
   function makeDraggableWithClickGuard({ root, handle, shouldStartDrag, onMoveEnd }) {
     let dragging = false;
     let moved = false;
@@ -132,7 +126,7 @@
     let startLeft = 0, startTop = 0;
 
     const getRect = () => root.getBoundingClientRect();
-    const THRESH = 5; // px
+    const THRESH = 5;
 
     const onPointerDown = (ev) => {
       if (ev.button !== undefined && ev.button !== 0) return;
@@ -158,13 +152,10 @@
 
       if (!moved && (Math.abs(dx) > THRESH || Math.abs(dy) > THRESH)) moved = true;
 
-      const nextLeft = startLeft + dx;
-      const nextTop  = startTop  + dy;
-
       root.classList.add('bm-lib-dragging');
 
-      root.style.left = `${nextLeft}px`;
-      root.style.top  = `${nextTop}px`;
+      root.style.left = `${startLeft + dx}px`;
+      root.style.top  = `${startTop + dy}px`;
       root.style.right = 'auto';
       root.style.bottom = 'auto';
 
@@ -209,7 +200,6 @@
       font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       user-select: none;
     }
-
     #bm-lib {
       position: fixed;
       width: 340px;
@@ -220,155 +210,120 @@
       overflow: hidden;
       backdrop-filter: blur(6px);
     }
-
     #bm-lib .bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
+      display:flex; align-items:center; gap:8px;
+      padding:8px 10px;
       background: rgba(255,255,255,.06);
       border-bottom: 1px solid rgba(255,255,255,.10);
       cursor: grab;
     }
-
-    #bm-lib .title {
-      font-weight: 800;
-      font-size: 13px;
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
+    #bm-lib .title { font-weight:800; font-size:13px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     #bm-lib .bar button {
-      padding: 4px 8px;
-      border-radius: 10px;
+      padding:4px 8px; border-radius:10px;
       background: rgba(255,255,255,.10);
       border: 1px solid rgba(255,255,255,.14);
-      color: #fff;
-      cursor: pointer;
+      color:#fff; cursor:pointer;
     }
     #bm-lib .bar button:hover { background: rgba(255,255,255,.16); }
 
-    #bm-lib .body { padding: 10px; }
-    #bm-lib .row { display: flex; gap: 6px; margin: 6px 0; align-items: center; }
+    #bm-lib .body { padding:10px; }
+    #bm-lib .row { display:flex; gap:6px; margin:6px 0; align-items:center; }
 
     #bm-lib select,
     #bm-lib input[type="text"],
-    #bm-lib input[type="number"] {
-      width: 100%;
+    #bm-lib input[type="number"]{
+      width:100%;
       background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.14);
-      color: #fff;
-      border-radius: 10px;
-      padding: 7px 9px;
-      outline: none;
+      border:1px solid rgba(255,255,255,.14);
+      color:#fff;
+      border-radius:10px;
+      padding:7px 9px;
+      outline:none;
     }
 
-    #bm-lib button.action {
-      width: 100%;
+    #bm-lib button.action{
+      width:100%;
       background: rgba(255,255,255,.10);
-      border: 1px solid rgba(255,255,255,.14);
-      color: #fff;
-      border-radius: 10px;
-      padding: 7px 9px;
-      cursor: pointer;
-      white-space: nowrap;
+      border:1px solid rgba(255,255,255,.14);
+      color:#fff;
+      border-radius:10px;
+      padding:7px 9px;
+      cursor:pointer;
+      white-space:nowrap;
     }
-    #bm-lib button.action:hover { background: rgba(255,255,255,.16); }
+    #bm-lib button.action:hover{ background: rgba(255,255,255,.16); }
 
-    #bm-lib button.small {
-      width: 100%;
+    #bm-lib button.small{
+      width:100%;
       background: rgba(255,255,255,.10);
-      border: 1px solid rgba(255,255,255,.14);
-      color: #fff;
-      border-radius: 10px;
-      padding: 7px 0;
-      cursor: pointer;
-      white-space: nowrap;
-      text-align: center;
-      font-size: 14px;
-      line-height: 1;
+      border:1px solid rgba(255,255,255,.14);
+      color:#fff;
+      border-radius:10px;
+      padding:7px 0;
+      cursor:pointer;
+      text-align:center;
+      font-size:14px;
+      line-height:1;
     }
-    #bm-lib button.small:hover { background: rgba(255,255,255,.16); }
+    #bm-lib button.small:hover{ background: rgba(255,255,255,.16); }
 
     #bm-lib .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 
-    #bm-lib .fileWrap {
+    #bm-lib .fileWrap{
       display:flex; gap:8px; align-items:center; width:100%;
-      padding: 8px 9px;
-      border-radius: 10px;
+      padding:8px 9px;
+      border-radius:10px;
       background: rgba(255,255,255,.06);
       border: 1px solid rgba(255,255,255,.14);
     }
-    #bm-lib .fileWrap .fileBtn {
-      padding: 6px 10px;
-      border-radius: 10px;
+    #bm-lib .fileWrap .fileBtn{
+      padding:6px 10px;
+      border-radius:10px;
       background: rgba(255,255,255,.12);
       border: 1px solid rgba(255,255,255,.16);
-      cursor: pointer;
-      white-space: nowrap;
+      cursor:pointer;
+      white-space:nowrap;
     }
-    #bm-lib .fileWrap .fileBtn:hover { background: rgba(255,255,255,.18); }
-    #bm-lib .fileWrap .fileName {
-      opacity: .9;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex: 1;
+    #bm-lib .fileWrap .fileBtn:hover{ background: rgba(255,255,255,.18); }
+    #bm-lib .fileWrap .fileName{
+      opacity:.9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;
     }
-    #bm-lib input[type="file"] {
-      position: absolute !important;
-      left: -9999px !important;
-      width: 0 !important;
-      height: 0 !important;
-      opacity: 0 !important;
-      pointer-events: none !important;
+    #bm-lib input[type="file"]{
+      position:absolute !important; left:-9999px !important;
+      width:0 !important; height:0 !important; opacity:0 !important; pointer-events:none !important;
     }
 
-    #bm-lib-icon {
-      position: fixed;
-      width: 44px;
-      height: 44px;
-      border-radius: 14px;
+    #bm-lib-icon{
+      position:fixed;
+      width:44px; height:44px;
+      border-radius:14px;
       background: rgba(20,20,20,.92);
-      border: 1px solid rgba(255,255,255,.12);
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: grab;
-      backdrop-filter: blur(6px);
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+      display:flex; align-items:center; justify-content:center;
+      cursor:grab; backdrop-filter: blur(6px);
     }
-    #bm-lib-icon button {
-      all: unset;
-      width: 100%;
-      height: 100%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      cursor: pointer;
-      font-size: 20px;
+    #bm-lib-icon button{
+      all:unset; width:100%; height:100%;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; font-size:20px;
     }
 
-    #bm-icon-mode {
-      position: fixed;
-      width: 46px;
-      height: 46px;
-      border-radius: 12px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      cursor: grab;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    #bm-icon-mode{
+      position:fixed;
+      width:46px; height:46px;
+      border-radius:12px;
+      display:none;
+      align-items:center; justify-content:center;
+      cursor:grab;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
       background: rgba(0,0,0,.25);
-      border: 1px solid rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.12);
       backdrop-filter: blur(6px);
     }
-    #bm-icon-mode img { width: 28px; height: 28px; display: block; }
+    #bm-icon-mode img{ width:28px; height:28px; display:block; }
   `);
 
-  // ---- BlueMarble icon mode
   function ensureBlueMarbleIconMode() {
     const bm = getBMElements();
     if (!bm.panel) return;
@@ -441,7 +396,6 @@
     setBMMinimized(!!ui.minimized);
   }
 
-  // ---- Helpers for import-from-map/BM
   function setTLFormCoords(tlx, tly, px, py) {
     setInputValue(qs('#bm-lib-tlx'), tlx);
     setInputValue(qs('#bm-lib-tly'), tly);
@@ -451,17 +405,16 @@
 
   function importCoordsFromBMIntoTL() {
     const bm = getBMElements();
-    if (!bmReady()) return alert('Blue Marble inputs not found yet.');
+    if (!bmReady()) return alert('BM inputs not found yet.');
     const tlx = Number(bm.tlx.value);
     const tly = Number(bm.tly.value);
     const px  = Number(bm.px.value);
     const py  = Number(bm.py.value);
-    if (![tlx,tly,px,py].every(n => Number.isFinite(n))) return alert('Blue Marble coords are not valid numbers.');
+    if (![tlx,tly,px,py].every(n => Number.isFinite(n))) return alert('BM coords are not valid numbers.');
     setTLFormCoords(tlx, tly, px, py);
   }
 
   function parseLastClickedFromBmSpan() {
-    // BM creates: (Tl X: 1, Tl Y: 2, Px X: 3, Px Y: 4)
     const span = qs('#bm-h');
     const txt = span?.textContent || '';
     const m = txt.match(/Tl X:\s*(\d+),\s*Tl Y:\s*(\d+),\s*Px X:\s*(\d+),\s*Px Y:\s*(\d+)/i);
@@ -475,7 +428,6 @@
     setTLFormCoords(v.tlx, v.tly, v.px, v.py);
   }
 
-  // ---- Template Library UI
   function renderLibraryUI() {
     if (qs('#bm-lib') || qs('#bm-lib-icon')) return;
 
@@ -495,31 +447,23 @@
         </div>
 
         <div class="row">
-          <button class="action" id="bm-lib-load" type="button">Load → Blue Marble</button>
-          <button class="action" id="bm-lib-loadcreate" type="button" title="Loads then clicks Blue Marble's Create button">Load + Create</button>
+          <button class="action" id="bm-lib-load" type="button">Load → BM</button>
+          <button class="action" id="bm-lib-loadcreate" type="button" title="Loads then clicks BM's Create button">Load + Create</button>
         </div>
 
-        <!-- Row with arrows + delete current -->
         <div class="row">
-          <div style="flex: 1;">
-            <button class="small" id="bm-lib-moveup" type="button" title="Move selected up">↑</button>
-          </div>
-          <div style="flex: 1;">
-            <button class="small" id="bm-lib-movedown" type="button" title="Move selected down">↓</button>
-          </div>
-          <div style="flex: 2;">
-            <button class="action" id="bm-lib-deletecurrent" type="button">Delete current</button>
-          </div>
+          <div style="flex: 1;"><button class="small" id="bm-lib-moveup" type="button" title="Move selected up">↑</button></div>
+          <div style="flex: 1;"><button class="small" id="bm-lib-movedown" type="button" title="Move selected down">↓</button></div>
+          <div style="flex: 2;"><button class="action" id="bm-lib-deletecurrent" type="button">Delete current</button></div>
         </div>
 
-        <!-- New row: import coords buttons -->
         <div class="row">
           <button class="action" id="bm-lib-importmap" type="button" title="Requires a pixel to be selected on the map">Import from map</button>
           <button class="action" id="bm-lib-importbm" type="button" title="Copies coords from BlueMarble coordinate inputs">Import from BM</button>
         </div>
 
         <div class="row">
-          <input id="bm-lib-name" type="text" placeholder="Name (required, unique)" />
+          <input id="bm-lib-name" type="text" placeholder="Name (required, unique for NEW)" />
         </div>
 
         <div class="row">
@@ -541,6 +485,7 @@
 
         <div class="row">
           <button class="action" id="bm-lib-add" type="button">Add new template</button>
+          <button class="action" id="bm-lib-edit" type="button" title="Edits the selected template using the form values">Edit selected</button>
         </div>
 
         <div class="row">
@@ -621,6 +566,12 @@
     const fileBtn = qs('#bm-lib-filebtn');
     const fileName = qs('#bm-lib-filename');
 
+    function setFileLabelToStored(entry) {
+      if (!entry) fileName.textContent = 'No file selected';
+      else fileName.textContent = `Stored: ${entry.filename || 'image'}`;
+    }
+    function clearLocalChosenFile() { try { fileInput.value = ''; } catch {} }
+
     fileBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -628,7 +579,7 @@
     });
     fileInput.addEventListener('change', () => {
       const f = fileInput.files?.[0];
-      fileName.textContent = f ? f.name : 'No file selected';
+      fileName.textContent = f ? `New: ${f.name}` : 'No file selected';
     });
 
     const sel = qs('#bm-lib-select');
@@ -649,13 +600,48 @@
         opt.textContent = `${it.name} — [${it.coords.tlx},${it.coords.tly},${it.coords.px},${it.coords.py}]`;
         sel.appendChild(opt);
       });
-
       if (keepIdx !== null && Number.isInteger(keepIdx) && keepIdx >= 0 && keepIdx < items.length) {
         sel.value = String(keepIdx);
       }
     }
 
-    function requireNameUnique() {
+    function getSelectedIndex() {
+      const idx = Number(sel.value);
+      return Number.isInteger(idx) ? idx : -1;
+    }
+
+    function getSelectedEntry() {
+      const items = loadStore();
+      const idx = getSelectedIndex();
+      if (idx < 0 || idx >= items.length) return null;
+      return { entry: items[idx], idx, items };
+    }
+
+    function populateFormFromSelected() {
+      const picked = getSelectedEntry();
+      if (!picked) return;
+      const { entry } = picked;
+
+      setInputValue(qs('#bm-lib-name'), entry.name);
+      setInputValue(qs('#bm-lib-tlx'), entry.coords.tlx);
+      setInputValue(qs('#bm-lib-tly'), entry.coords.tly);
+      setInputValue(qs('#bm-lib-px'),  entry.coords.px);
+      setInputValue(qs('#bm-lib-py'),  entry.coords.py);
+
+      clearLocalChosenFile();
+      setFileLabelToStored(entry);
+    }
+
+    // QoL: single-click selection populates form
+    sel.addEventListener('change', () => populateFormFromSelected());
+
+    // QoL: double-click selection populates form AND loads into BM (without auto-create)
+    sel.addEventListener('dblclick', () => {
+      populateFormFromSelected();
+      loadIntoBM(false);
+    });
+
+    function requireNameUniqueForNew() {
       const name = (qs('#bm-lib-name').value || '').trim();
       if (!name) {
         alert('Name is required 🙂');
@@ -665,35 +651,15 @@
       const items = loadStore();
       const existing = new Set(items.map(t => normName(t.name)));
       if (existing.has(normName(name))) {
-        alert('That name is already used. Pick a unique name.');
+        alert('That name is already used. Pick a unique name (for NEW templates).');
         qs('#bm-lib-name').focus();
         return null;
       }
       return name;
     }
 
-    function getSelectedIndex() {
-      const idx = Number(sel.value);
-      return Number.isInteger(idx) ? idx : -1;
-    }
-
-    function moveSelected(delta) {
-      const items = loadStore();
-      const idx = getSelectedIndex();
-      if (idx < 0 || idx >= items.length) return;
-
-      const to = idx + delta;
-      if (to < 0 || to >= items.length) return;
-
-      const [x] = items.splice(idx, 1);
-      items.splice(to, 0, x);
-
-      saveStore(items);
-      refreshSelect(to);
-    }
-
     async function addNewTemplate() {
-      const name = requireNameUnique();
+      const name = requireNameUniqueForNew();
       if (!name) return;
 
       const tlx = Number(qs('#bm-lib-tlx').value);
@@ -712,18 +678,76 @@
       items.unshift(entry);
       saveStore(items);
       refreshSelect(0);
+
+      clearLocalChosenFile();
+      setFileLabelToStored(entry);
     }
 
-    function getSelectedEntry() {
+    async function editSelectedTemplate() {
+      const picked = getSelectedEntry();
+      if (!picked) return alert('Select a template to edit first.');
+
+      const { entry, idx, items } = picked;
+
+      const formName = (qs('#bm-lib-name').value || '').trim();
+      if (!formName) {
+        alert('Name is required 🙂');
+        qs('#bm-lib-name').focus();
+        return;
+      }
+
+      if (formName !== entry.name) {
+        alert(`When editing, the name must stay the same.\n\nSelected: "${entry.name}"\nForm: "${formName}"\n\n(Use "Add new template" to create a new one with a unique name.)`);
+        setInputValue(qs('#bm-lib-name'), entry.name);
+        return;
+      }
+
+      const ok = confirm(`Edit "${entry.name}" with the current form values?`);
+      if (!ok) return;
+
+      const tlx = Number(qs('#bm-lib-tlx').value);
+      const tly = Number(qs('#bm-lib-tly').value);
+      const px  = Number(qs('#bm-lib-px').value);
+      const py  = Number(qs('#bm-lib-py').value);
+
+      if (![tlx,tly,px,py].every(n => Number.isFinite(n))) return alert('Fill all 4 coordinates (numbers).');
+
+      entry.coords = { tlx, tly, px, py };
+      entry.updatedAt = Date.now();
+
+      const newFile = fileInput.files?.[0];
+      if (newFile) {
+        entry.dataUrl = await toBase64(newFile);
+        entry.filename = newFile.name;
+        entry.mime = newFile.type || entry.mime || 'image/png';
+      }
+
+      items[idx] = entry;
+      saveStore(items);
+      refreshSelect(idx);
+
+      clearLocalChosenFile();
+      setFileLabelToStored(entry);
+    }
+
+    function moveSelected(delta) {
       const items = loadStore();
       const idx = getSelectedIndex();
-      if (idx < 0 || idx >= items.length) return null;
-      return { entry: items[idx], idx, items };
+      if (idx < 0 || idx >= items.length) return;
+
+      const to = idx + delta;
+      if (to < 0 || to >= items.length) return;
+
+      const [x] = items.splice(idx, 1);
+      items.splice(to, 0, x);
+
+      saveStore(items);
+      refreshSelect(to);
     }
 
     function loadIntoBM(doCreate) {
       const bm = getBMElements();
-      if (!bmReady()) return alert('Blue Marble inputs not found yet.');
+      if (!bmReady()) return alert('BM inputs not found yet.');
 
       const picked = getSelectedEntry();
       if (!picked) return alert('Pick a saved template first.');
@@ -740,7 +764,7 @@
         setFileInput(bm.file, file);
       } catch (err) {
         console.error(err);
-        return alert('Failed to inject file into Blue Marble input.');
+        return alert('Failed to inject file into BM input.');
       }
 
       if (doCreate) bm.create?.click();
@@ -755,6 +779,9 @@
       picked.items.splice(picked.idx, 1);
       saveStore(picked.items);
       refreshSelect();
+
+      fileName.textContent = 'No file selected';
+      clearLocalChosenFile();
     }
 
     function exportTemplates() {
@@ -819,26 +846,22 @@
       );
       if (!incomingRaw.length) return alert('No valid templates found.');
 
-      // Ask about duplicates (2)
       const dupInImport = hasDuplicateNames(incomingRaw);
       if (dupInImport) {
         const ok = confirm(
           'Duplicate template names were detected in the import.\n\n' +
-          'Press OK to import anyway (duplicates will be renamed like "Name (2)", "Name (3)", ...).\n' +
-          'Press Cancel to abort the import.'
+          'OK = import anyway (duplicates will be renamed like "Name (2)", "Name (3)", ...)\n' +
+          'Cancel = abort import'
         );
         if (!ok) return;
       }
 
       const existing = loadStore();
 
-      // Remove exact duplicates (same coords/file/data size) but DO NOT collapse by name.
       const exactKey = (t) =>
         `${t.coords.tlx},${t.coords.tly},${t.coords.px},${t.coords.py}::${t.filename || ''}::${(t.dataUrl || '').length}`;
 
       const seenExact = new Set(existing.map(exactKey));
-
-      // For naming: if dupInImport or name conflicts with existing, we rename.
       const usedNames = new Set(existing.map(t => normName(t.name)));
 
       const incoming = [];
@@ -846,7 +869,6 @@
         if (seenExact.has(exactKey(t))) continue;
 
         const fixed = { ...t };
-        // If duplicates exist OR name collides with existing, ensure unique
         if (dupInImport || usedNames.has(normName(fixed.name))) {
           fixed.name = makeUniqueName(fixed.name, usedNames);
         } else {
@@ -865,18 +887,19 @@
       alert(`Imported ${incoming.length} template(s).`);
     }
 
-    // wire buttons
+    // Wire buttons
     qs('#bm-lib-load').addEventListener('click', () => loadIntoBM(false));
     qs('#bm-lib-loadcreate').addEventListener('click', () => loadIntoBM(true));
-    qs('#bm-lib-add').addEventListener('click', () => addNewTemplate().catch(console.error));
 
     qs('#bm-lib-moveup').addEventListener('click', () => moveSelected(-1));
     qs('#bm-lib-movedown').addEventListener('click', () => moveSelected(+1));
-
     qs('#bm-lib-deletecurrent').addEventListener('click', deleteCurrent);
 
     qs('#bm-lib-importmap').addEventListener('click', importCoordsFromMapIntoTL);
     qs('#bm-lib-importbm').addEventListener('click', importCoordsFromBMIntoTL);
+
+    qs('#bm-lib-add').addEventListener('click', () => addNewTemplate().catch(console.error));
+    qs('#bm-lib-edit').addEventListener('click', () => editSelectedTemplate().catch(console.error));
 
     qs('#bm-lib-export').addEventListener('click', exportTemplates);
 
