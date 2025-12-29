@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.1.7
+// @version      0.1.8
 // @author       jaz / jazdka
 // @description  Stores template images + coords and loads them into the already-running BM UI.
 // @match        https://wplace.live/*
@@ -201,6 +201,7 @@
       color: #fff;
       font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       user-select: none;
+      touch-action: none;
     }
     #bm-lib {
       position: fixed;
@@ -322,6 +323,7 @@
       background: rgba(0,0,0,.25);
       border:1px solid rgba(255,255,255,.12);
       backdrop-filter: blur(6px);
+      touch-action: none; /* <- add this */
     }
 
     #bm-icon-mode img {
@@ -333,6 +335,13 @@
       -webkit-user-drag: none;
     }
 
+    #bm-icon-mode,
+    #bm-icon-mode * {
+      -webkit-user-drag: none !important;
+      user-drag: none !important;
+      user-select: none !important;
+    }
+
     #bm-lib-bmreset {
       padding: 4px 7px !important;
       font-size: 12px !important;
@@ -340,6 +349,15 @@
     }
     #bm-lib-bmreset:hover { opacity: 1; }
   `);
+
+  // Global guard: never allow native HTML drag from the BM icon (cross-browser)
+  document.addEventListener('dragstart', (e) => {
+    const t = e.target;
+    if (t && t.closest && t.closest('#bm-icon-mode')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
   function ensureBlueMarbleIconMode() {
     const bm = getBMElements();
@@ -350,12 +368,25 @@
       icon = document.createElement('div');
       icon.id = 'bm-icon-mode';
       icon.innerHTML = `<img src="${BM_FAVICON}" alt="BlueMarble" title="Open BlueMarble" />`;
+      icon.setAttribute('draggable', 'false');
       const img = icon.querySelector('img');
       if (img) {
         img.draggable = false;                 // stops “drag the image file”
         img.addEventListener('dragstart', e => e.preventDefault());
       }
+      // Kill native “drag image” behavior (capture phase = before browser starts drag ghost)
+      const killDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      };
+
+      icon.addEventListener('dragstart', killDrag, true);
       document.body.appendChild(icon);
+      // The key fix: block native drag pipeline at the earliest step
+      icon.addEventListener('pointerdown', (e) => {
+        if (e.button === 0) e.preventDefault();
+      }, true);
     }
 
     // ---- helpers
