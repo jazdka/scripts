@@ -3,7 +3,7 @@
 // @match       https://wplace.live/*
 // @grant       GM_addStyle
 // @grant       unsafeWindow
-// @version     0.0.2
+// @version     0.0.3
 // @author      jaz/jazdka
 // @run-at document-start
 // @license MIT
@@ -16,10 +16,9 @@
 
   // --- persistent state (localStorage) ---
   const LS_ENABLED = 'wplace_darkmode_enabled';
-  const LS_POS = 'wplace_darkmode_icon_pos';
+  const LS_POS = 'wplace_darkmode_icon_pos'; // now stores { right, top }
 
   function getEnabled() {
-    // default: enabled (same behavior as old script)
     const v = localStorage.getItem(LS_ENABLED);
     return v === null ? true : v === '1';
   }
@@ -27,36 +26,92 @@
     localStorage.setItem(LS_ENABLED, val ? '1' : '0');
   }
 
-  function getSavedPos() {
-    try {
-      const raw = localStorage.getItem(LS_POS);
-      if (!raw) return null;
-      const p = JSON.parse(raw);
-      if (typeof p?.x === 'number' && typeof p?.y === 'number') return p;
-    } catch {}
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function safeJsonParse(s) {
+    try { return JSON.parse(s); } catch { return null; }
+  }
+
+  function savePosRightTop(right, top) {
+    localStorage.setItem(LS_POS, JSON.stringify({ right, top }));
+  }
+
+  // Convert old {x,y} (left/top) to {right,top} once, if found.
+  function maybeMigrateOldPos(btnSize = { w: 46, h: 46 }) {
+    const raw = localStorage.getItem(LS_POS);
+    if (!raw) return;
+
+    const p = safeJsonParse(raw);
+    if (!p || typeof p !== 'object') return;
+
+    // old format: {x,y}
+    if (Number.isFinite(p.x) && Number.isFinite(p.y) && !(Number.isFinite(p.right) && Number.isFinite(p.top))) {
+      const right = Math.max(0, Math.round(window.innerWidth - (p.x + btnSize.w)));
+      const top = Math.max(0, Math.round(p.y));
+      savePosRightTop(right, top);
+    }
+  }
+
+  function getSavedPosRightTop() {
+    const raw = localStorage.getItem(LS_POS);
+    if (!raw) return null;
+
+    const p = safeJsonParse(raw);
+    if (!p || typeof p !== 'object') return null;
+
+    if (Number.isFinite(p.right) && Number.isFinite(p.top)) {
+      return { right: p.right, top: p.top };
+    }
     return null;
   }
-  function savePos(x, y) {
-    localStorage.setItem(LS_POS, JSON.stringify({ x, y }));
+
+  function clampPosRightTop(pos, el) {
+    const w = el?.offsetWidth || 46;
+    const h = el?.offsetHeight || 46;
+
+    const maxRight = Math.max(0, window.innerWidth - w);
+    const maxTop   = Math.max(0, window.innerHeight - h);
+
+    let right = Number(pos?.right);
+    let top   = Number(pos?.top);
+
+    if (!Number.isFinite(right)) right = 16;   // default like your old left:16
+    if (!Number.isFinite(top))   top = 120;
+
+    right = clamp(right, 0, maxRight);
+    top   = clamp(top,   0, maxTop);
+
+    return { right, top };
+  }
+
+  function applyPosRightTop(el, pos) {
+    el.style.left = 'auto';
+    el.style.bottom = 'auto';
+    el.style.right = `${pos.right}px`;
+    el.style.top = `${pos.top}px`;
+  }
+
+  function posToRightTop(el) {
+    const r = el.getBoundingClientRect();
+    const right = Math.max(0, Math.round(window.innerWidth - (r.left + r.width)));
+    const top   = Math.max(0, Math.round(r.top));
+    return { right, top };
   }
 
   let enabled = getEnabled();
 
-  // Mark HTML so CSS can be turned on/off without removing injected styles
   function syncHtmlClass() {
     const el = document.documentElement;
     if (!el) return;
     el.classList.toggle('wplace-darkmode-enabled', !!enabled);
   }
 
-  // Ensure class is applied early
   syncHtmlClass();
-  // In case documentElement wasn't ready at document-start in some environments:
   if (!document.documentElement) {
     new MutationObserver(() => {
-      if (document.documentElement) {
-        syncHtmlClass();
-      }
+      if (document.documentElement) syncHtmlClass();
     }).observe(document, { childList: true, subtree: true });
   }
 
@@ -66,22 +121,14 @@
   root.fetch = async (req, options) => {
     const res = await originalFetch(req, options);
 
-    // If disabled, behave exactly like the site (no JSON touching)
     if (!enabled) return res;
-
-    // Only patch the style JSON we care about
     if (res.url !== 'https://maps.wplace.live/styles/liberty') return res;
 
     const json = await res.json();
     json.layers.forEach((layer) => {
       switch (layer.id) {
-        case 'background':
-          layer.paint['background-color'] = '#272e40';
-          break;
-
-        case 'water':
-          layer.paint['fill-color'] = '#000d2a';
-          break;
+        case 'background': layer.paint['background-color'] = '#272e40'; break;
+        case 'water': layer.paint['fill-color'] = '#000d2a'; break;
 
         case 'waterway_tunnel':
         case 'waterway_river':
@@ -89,28 +136,15 @@
           layer.paint['line-color'] = '#000d2a';
           break;
 
-        case 'natural_earth':
-          layer.paint['raster-brightness-max'] = 0.4;
-          break;
-
-        case 'landcover_ice':
-          layer.paint['fill-color'] = '#475677';
-          break;
-
-        case 'landcover_sand':
-          layer.paint['fill-color'] = '#775f47';
-          break;
+        case 'natural_earth': layer.paint['raster-brightness-max'] = 0.4; break;
+        case 'landcover_ice': layer.paint['fill-color'] = '#475677'; break;
+        case 'landcover_sand': layer.paint['fill-color'] = '#775f47'; break;
 
         case 'park':
-          layer.paint = {
-            'fill-color': '#0e4957',
-            'fill-opacity': 0.7,
-          };
+          layer.paint = { 'fill-color': '#0e4957', 'fill-opacity': 0.7 };
           break;
 
-        case 'park_outline':
-          layer.paint['line-opacity'] = 0;
-          break;
+        case 'park_outline': layer.paint['line-opacity'] = 0; break;
 
         case 'landuse_pitch':
         case 'landuse_track':
@@ -118,21 +152,10 @@
           layer.paint['fill-color'] = '#3e4966';
           break;
 
-        case 'landuse_cemetery':
-          layer.paint['fill-color'] = '#3b3b57';
-          break;
-
-        case 'landuse_hospital':
-          layer.paint['fill-color'] = '#663e3e';
-          break;
-
-        case 'building':
-          layer.paint['fill-color'] = '#1c3b69';
-          break;
-
-        case 'building_3d':
-          layer.paint['fill-extrusion-color'] = '#1c3b69';
-          break;
+        case 'landuse_cemetery': layer.paint['fill-color'] = '#3b3b57'; break;
+        case 'landuse_hospital': layer.paint['fill-color'] = '#663e3e'; break;
+        case 'building': layer.paint['fill-color'] = '#1c3b69'; break;
+        case 'building_3d': layer.paint['fill-extrusion-color'] = '#1c3b69'; break;
 
         case 'waterway_line_label':
         case 'water_name_point_label':
@@ -212,29 +235,18 @@
           layer.paint['text-halo-color'] = 'rgba(0,0,0,0.7)';
           break;
 
-        case 'aeroway_fill':
-          layer.paint['fill-color'] = '#2a486c';
-          break;
-
-        case 'aeroway_runway':
-          layer.paint['line-color'] = '#253d61';
-          break;
-
-        case 'aeroway_taxiway':
-          layer.paint['line-color'] = '#3d5b77';
-          break;
-
-        case 'boundary_3':
-          layer.paint['line-color'] = '#707784';
-          break;
+        case 'aeroway_fill': layer.paint['fill-color'] = '#2a486c'; break;
+        case 'aeroway_runway': layer.paint['line-color'] = '#253d61'; break;
+        case 'aeroway_taxiway': layer.paint['line-color'] = '#3d5b77'; break;
+        case 'boundary_3': layer.paint['line-color'] = '#707784'; break;
       }
     });
 
     const text = JSON.stringify(json)
-      .replaceAll('#e9ac77', '#476889') // road
-      .replaceAll('#fc8', '#476889') // primary roads
-      .replaceAll('#fea', '#3d5b77') // secondary roads
-      .replaceAll('#cfcdca', '#3b4d65'); // casing
+      .replaceAll('#e9ac77', '#476889')
+      .replaceAll('#fc8', '#476889')
+      .replaceAll('#fea', '#3d5b77')
+      .replaceAll('#cfcdca', '#3b4d65');
 
     return new Response(text, {
       headers: res.headers,
@@ -257,14 +269,13 @@
       background-color: white !important;
     }
 
-    /* toggle button: rounded square like BM */
     #wplace-darkmode-toggle {
       position: fixed;
-      left: 16px;
+      right: 16px;   /* default: right/top now */
       top: 120px;
       width: 46px;
       height: 46px;
-      border-radius: 12px;              /* <- rounded square */
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -280,35 +291,11 @@
       backdrop-filter: blur(6px);
     }
 
-    /* optional: show different “mode” styling */
     #wplace-darkmode-toggle.wplace-off {
       background: rgba(0,0,0,.25);
       border: 1px solid rgba(255,255,255,.12);
     }
 
-    /* SVG icon */
-    #wplace-darkmode-toggle svg {
-      width: 26px;
-      height: 26px;
-      display: block;
-      pointer-events: none;
-      user-select: none;
-      -webkit-user-drag: none;
-      fill: #fff;
-      opacity: .95;
-    }
-
-    #wplace-darkmode-toggle.wplace-off svg {
-      opacity: .85;
-    }
-
-    /* Kill native drag pipeline (like your example does) */
-    #wplace-darkmode-toggle,
-    #wplace-darkmode-toggle * {
-      -webkit-user-drag: none !important;
-      user-drag: none !important;
-      user-select: none !important;
-    }
     #wplace-darkmode-toggle .dm-icon{
       width: 28px;
       height: 28px;
@@ -317,7 +304,13 @@
       overflow: visible;
     }
 
-    /* Shared colors: ON (dark tile) -> white glyph */
+    #wplace-darkmode-toggle,
+    #wplace-darkmode-toggle * {
+      -webkit-user-drag: none !important;
+      user-drag: none !important;
+      user-select: none !important;
+    }
+
     #wplace-darkmode-toggle .sun .core,
     #wplace-darkmode-toggle .sun .rays,
     #wplace-darkmode-toggle .moon .crescent{
@@ -325,7 +318,6 @@
       stroke: #fff;
     }
 
-    /* OFF (light tile) -> dark glyph */
     #wplace-darkmode-toggle.wplace-off .sun .core,
     #wplace-darkmode-toggle.wplace-off .sun .rays,
     #wplace-darkmode-toggle.wplace-off .moon .crescent{
@@ -333,10 +325,6 @@
       stroke: #111;
     }
 
-    /* ======= “MORPH” ANIMATION (sun <-> moon) =======
-       Default state below assumes Dark Mode is ON (enabled): show MOON.
-       When OFF (.wplace-off): show SUN.
-    */
     #wplace-darkmode-toggle .sun,
     #wplace-darkmode-toggle .moon{
       transform-origin: 32px 32px;
@@ -346,7 +334,6 @@
       will-change: transform, opacity;
     }
 
-    /* Dark Mode ON -> Moon visible */
     #wplace-darkmode-toggle .moon{
       opacity: 1;
       transform: rotate(0deg) scale(1);
@@ -356,7 +343,6 @@
       transform: rotate(-120deg) scale(0.6);
     }
 
-    /* Dark Mode OFF -> Sun visible */
     #wplace-darkmode-toggle.wplace-off .sun{
       opacity: 1;
       transform: rotate(0deg) scale(1);
@@ -366,7 +352,6 @@
       transform: rotate(140deg) scale(0.6);
     }
 
-    /* Extra sparkle: rays “pop” a bit when sun appears */
     #wplace-darkmode-toggle .sun .rays{
       transition: opacity 180ms ease, transform 280ms cubic-bezier(.2,.8,.2,1);
       transform-origin: 32px 32px;
@@ -389,23 +374,18 @@
     btn.id = 'wplace-darkmode-toggle';
     btn.title = 'Toggle Dark Mode (drag to move)';
 
-    // Simple icon that looks fine in both states
     btn.innerHTML = `
-    <svg class="dm-icon" viewBox="0 0 64 64" aria-hidden="true">
-      <!-- SUN -->
-      <g class="sun">
-        <g class="rays" fill="none" stroke-width="4" stroke-linecap="round">
-          <path d="M32 6v8M32 50v8M6 32h8M50 32h8M13 13l6 6M45 45l6 6M51 13l-6 6M19 45l-6 6"/>
+      <svg class="dm-icon" viewBox="0 0 64 64" aria-hidden="true">
+        <g class="sun">
+          <g class="rays" fill="none" stroke-width="4" stroke-linecap="round">
+            <path d="M32 6v8M32 50v8M6 32h8M50 32h8M13 13l6 6M45 45l6 6M51 13l-6 6M19 45l-6 6"/>
+          </g>
+          <circle class="core" cx="32" cy="32" r="12"/>
         </g>
-        <circle class="core" cx="32" cy="32" r="12"/>
-      </g>
-
-      <!-- MOON -->
-      <g class="moon">
-        <!-- crescent via 2 circles (looks clean, no weird path stuff) -->
-        <path class="crescent" d="M41.5 44.5c-11 0-20-9-20-20 0-7.4 4-14 10-17.4-1.7 3.2-2.6 6.9-2.6 10.7 0 12.7 10.3 23 23 23 2.9 0 5.8-.6 8.4-1.7-3.4 3.6-8.2 5.4-18.8 5.4z"/>
-      </g>
-    </svg>
+        <g class="moon">
+          <path class="crescent" d="M41.5 44.5c-11 0-20-9-20-20 0-7.4 4-14 10-17.4-1.7 3.2-2.6 6.9-2.6 10.7 0 12.7 10.3 23 23 23 2.9 0 5.8-.6 8.4-1.7-3.4 3.6-8.2 5.4-18.8 5.4z"/>
+        </g>
+      </svg>
     `;
 
     function syncBtnState() {
@@ -414,25 +394,31 @@
     }
     syncBtnState();
 
-    // Restore saved position
-    const saved = getSavedPos();
-    if (saved) {
-      btn.style.left = `${saved.x}px`;
-      btn.style.top = `${saved.y}px`;
-    }
+    // Migrate old x/y if present (needs a size; 46x46 matches CSS)
+    maybeMigrateOldPos({ w: 46, h: 46 });
+
+    // Restore saved position (right/top) and clamp it
+    const saved = getSavedPosRightTop();
+    const clamped = clampPosRightTop(saved, btn);
+    applyPosRightTop(btn, clamped);
+    savePosRightTop(clamped.right, clamped.top);
+
+    // Keep it on-screen when viewport changes
+    const onResize = () => {
+      const s = getSavedPosRightTop();
+      const c = clampPosRightTop(s, btn);
+      applyPosRightTop(btn, c);
+      savePosRightTop(c.right, c.top);
+    };
+    window.addEventListener('resize', onResize, { passive: true });
 
     let pointerId = null;
     let startX = 0, startY = 0;
-    let startLeft = 0, startTop = 0;
+    let startRight = 0, startTop = 0;
     let dragged = false;
-    const DRAG_THRESHOLD = 6; // px
-
-    function clamp(n, min, max) {
-      return Math.max(min, Math.min(max, n));
-    }
+    const DRAG_THRESHOLD = 6;
 
     btn.addEventListener('pointerdown', (e) => {
-      // Prevent map from also handling the gesture
       e.preventDefault();
       e.stopPropagation();
 
@@ -442,8 +428,11 @@
       const rect = btn.getBoundingClientRect();
       startX = e.clientX;
       startY = e.clientY;
-      startLeft = rect.left;
-      startTop = rect.top;
+
+      // current right/top from rect (robust even if style missing)
+      startRight = Math.max(0, window.innerWidth - (rect.left + rect.width));
+      startTop = Math.max(0, rect.top);
+
       dragged = false;
     }, { passive: false });
 
@@ -456,15 +445,18 @@
       if (!dragged && Math.hypot(dx, dy) >= DRAG_THRESHOLD) dragged = true;
 
       if (dragged) {
-        const maxX = window.innerWidth - btn.offsetWidth;
-        const maxY = window.innerHeight - btn.offsetHeight;
+        // when moving right, right-distance DECREASES (so subtract dx)
+        const nextRightRaw = startRight - dx;
+        const nextTopRaw = startTop + dy;
 
-        const nextLeft = clamp(startLeft + dx, 0, maxX);
-        const nextTop = clamp(startTop + dy, 0, maxY);
+        const maxRight = Math.max(0, window.innerWidth - btn.offsetWidth);
+        const maxTop   = Math.max(0, window.innerHeight - btn.offsetHeight);
 
-        btn.style.left = `${nextLeft}px`;
-        btn.style.top = `${nextTop}px`;
-        savePos(nextLeft, nextTop);
+        const nextRight = clamp(nextRightRaw, 0, maxRight);
+        const nextTop   = clamp(nextTopRaw,   0, maxTop);
+
+        applyPosRightTop(btn, { right: nextRight, top: nextTop });
+        savePosRightTop(nextRight, nextTop);
       }
     });
 
@@ -474,19 +466,15 @@
       try { btn.releasePointerCapture(pointerId); } catch {}
       pointerId = null;
 
-      // If it was a click (not a drag), toggle
       if (!dragged) {
         enabled = !enabled;
         setEnabled(enabled);
         syncHtmlClass();
         syncBtnState();
-
-        // Reload so OFF is truly "as if extension/script wasn't on" (map style resets too)
         location.reload();
       }
     });
 
-    // In case of cancellation
     btn.addEventListener('pointercancel', () => {
       pointerId = null;
     });
@@ -494,10 +482,10 @@
     document.documentElement.appendChild(btn);
   }
 
-  // Add button as soon as we can
   function bootUI() {
     if (document.documentElement) makeToggleButton();
   }
+
   bootUI();
   new MutationObserver(() => bootUI()).observe(document, { childList: true, subtree: true });
 })();
