@@ -1,7 +1,7 @@
   // ==UserScript==
   // @name         Template Library Loader
   // @namespace    local-bm-template-library
-  // @version      0.1.9
+  // @version      0.2.0
   // @author       jaz / jazdka
   // @description  Stores template images + coords and loads them into the already-running BM UI.
   // @match        https://wplace.live/*
