@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.3.0
+// @version      0.3.1
 // @author       jaz / jazdka
 // @description  Stores template images + coords and loads them into the already-running BM UI. Supports Blue Marble 0.88 and 0.90+.
 // @match        https://wplace.live/*
@@ -1078,6 +1078,40 @@
 
     refreshSelect();
   }
+
+  // ─── Tampermonkey menu commands ───────────────────────────────────────────────
+  GM_registerMenuCommand("📚 Reset panel position", () => {
+    const current = loadUI();
+    current.panel     = { ...DEFAULT_UI.panel };
+    current.icon      = { ...DEFAULT_UI.icon };
+    current.minimized = false;
+    saveUI(current);
+    const panel = qs("#bm-lib");
+    const icon  = qs("#bm-lib-icon");
+    if (panel) { applyPositionFromUI(panel, current.panel); panel.style.display = ""; }
+    if (icon)  { applyPositionFromUI(icon,  current.icon);  icon.style.display  = "none"; }
+    if (!panel && !icon) alert("Position reset! Reload the page to see the panel in the top-right corner.");
+  });
+
+  GM_registerMenuCommand("📚 Show panel (un-minimize)", () => {
+    const current = loadUI();
+    current.minimized = false;
+    saveUI(current);
+    const panel = qs("#bm-lib");
+    const icon  = qs("#bm-lib-icon");
+    if (panel && icon) { panel.style.display = ""; icon.style.display = "none"; }
+    else alert("Panel not in the DOM yet — try reloading the page.");
+  });
+
+  GM_registerMenuCommand("📚 Hard reset position (clears saved pos)", () => {
+    if (!confirm("Reset the panel to its default position?\n(Your templates will NOT be deleted.)")) return;
+    saveUI({ ...DEFAULT_UI });
+    const panel = qs("#bm-lib");
+    const icon  = qs("#bm-lib-icon");
+    if (panel) { applyPositionFromUI(panel, DEFAULT_UI.panel); panel.style.display = ""; }
+    if (icon)  { applyPositionFromUI(icon,  DEFAULT_UI.icon);  icon.style.display  = "none"; }
+    alert("Position reset to default (top-right corner).");
+  });
 
   // ─── Boot ─────────────────────────────────────────────────────────────────────
   // Wait for BM to be ready (either version) before showing the UI.
