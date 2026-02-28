@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Template Library Loader
 // @namespace    local-bm-template-library
-// @version      0.3.4
+// @version      0.3.5
 // @author       jaz / jazdka
 // @description  Stores template images + coords and loads them into the already-running BM UI. Supports Blue Marble 0.88 and 0.90+. Supports Blue Marble 0.88 and 0.90+.
 // @match        https://wplace.live/*
@@ -106,10 +106,23 @@
 
     if (ver === "0.90") {
       // File input: lives inside .bm-A wrapper (the yt() builder puts <input type=file> first)
-      const fileWrapper = qs(".bm-A");
-      const fileInput = fileWrapper
-        ? fileWrapper.querySelector("input[type='file']")
-        : null;
+      // In BM 0.90, yt() creates: parentDiv > [input[type=file], button.bm-A]
+      // The file input is a SIBLING of .bm-A, not a child
+      var bmABtn = qs(".bm-A");
+      var fileInput = null;
+      if (bmABtn && bmABtn.parentNode) {
+        fileInput = bmABtn.parentNode.querySelector("input[type='file']");
+      }
+      if (!fileInput) {
+        var bmMainPanel = qs("#bm-t");
+        if (bmMainPanel) fileInput = bmMainPanel.querySelector("input[type='file'][accept]");
+      }
+      if (!fileInput) {
+        var allFileInputs = document.querySelectorAll("input[type='file']");
+        for (var _fi = 0; _fi < allFileInputs.length; _fi++) {
+          if (!allFileInputs[_fi].id.startsWith("bm-lib")) { fileInput = allFileInputs[_fi]; break; }
+        }
+      }
 
       // Create button: find by text inside the main BM panel #bm-t
       const panel = qs("#bm-t");
